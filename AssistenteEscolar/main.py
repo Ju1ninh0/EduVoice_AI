@@ -1,25 +1,9 @@
-import os
-import sys
-import pygame
-
+import os, sys
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, BASE_DIR)
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
 
-print("Iniciando Assistente Escolar...")
+from AssistenteEscolar.interface.tela_login import TelaLogin
 
-from interface.app_gui import AppGUI
-from core.leitor import LeitorVoz
-from core.ouvinte import OuvinteVoz
-from core.analisador import AnalisadorTexto
-from core.persistencia import Persistencia
-
-if __name__ == "__main__":
-    pygame.init()
-    
-    leitor = LeitorVoz()
-    ouvinte = OuvinteVoz()
-    analisador = AnalisadorTexto()
-    persistencia = Persistencia()
-    
-    app = AppGUI()
-    app.mainloop()
+def run():
+    TelaLogin().mainloop()
