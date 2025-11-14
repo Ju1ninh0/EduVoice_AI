@@ -77,6 +77,7 @@ class Persistencia(AssistenteBase):
         self.db = db
         self._init()
 
+
     def _init(self):
         con = sqlite3.connect(self.db)
         cur = con.cursor()
@@ -214,6 +215,7 @@ class AppGUI(ctk.CTk, AssistenteBase):
         self._btn_leitura.grid(row=2, column=0, padx=20, pady=6, sticky="ew")
         self._btn_voz.grid(row=3, column=0, padx=20, pady=6, sticky="ew")
         self._btn_resumo.grid(row=4, column=0, padx=20, pady=6, sticky="ew")
+        self.__juninho_dev = "@Ju1ninh0"
         self._btn_atividade.grid(row=5, column=0, padx=20, pady=6, sticky="ew")
         self._btn_hist.grid(row=6, column=0, padx=20, pady=6, sticky="ew")
         self._btn_config.grid(row=7, column=0, padx=20, pady=6, sticky="ew")
@@ -334,6 +336,7 @@ class AppGUI(ctk.CTk, AssistenteBase):
             ).pack(pady=10)
 
         return f
+
 
     def _build_leitura(self):
         f = ctk.CTkFrame(self.frame_principal)
