@@ -7,6 +7,13 @@ import nltk
 from nltk.tokenize import sent_tokenize
 nltk.download("punkt", quiet=True)
 
+try:
+    import matplotlib.pyplot as plt
+    from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+    MATPLOT = True
+except Exception:
+    MATPLOT = False
+
 class AssistenteBase:
     def __init__(self, nome="EduVoice"):
         self.nome = nome
@@ -17,23 +24,22 @@ class LeitorVoz(AssistenteBase):
         self._mixer_init = False
         self._tmpdir = tempfile.gettempdir()
 
-    def _ensure_mixer(self):
+    def _ensure(self):
         if not self._mixer_init:
             pygame.mixer.init()
             self._mixer_init = True
 
-    def falar(self, texto: str):
+    def falar(self, texto):
         if not texto.strip():
             raise ValueError("Texto vazio")
-        mp3_path = os.path.join(self._tmpdir, f"voz_{int(time.time())}.mp3")
-        tts = gTTS(texto, lang="pt")
-        tts.save(mp3_path)
-        self._ensure_mixer()
-        pygame.mixer.music.load(mp3_path)
+        mp3 = os.path.join(self._tmpdir, f"voz_{int(time.time())}.mp3")
+        gTTS(texto, lang="pt").save(mp3)
+        self._ensure()
+        pygame.mixer.music.load(mp3)
         pygame.mixer.music.play()
-        return mp3_path
+        return mp3
 
-    def aguardaraudio(self):
+    def esperar(self):
         while pygame.mixer.music.get_busy():
             time.sleep(0.1)
 
@@ -46,17 +52,12 @@ class OuvinteVoz(AssistenteBase):
         super().__init__(nome)
         self.r = sr.Recognizer()
 
-    def ouvir(self) -> str:
+    def ouvir(self):
         try:
             with sr.Microphone() as mic:
                 self.r.adjust_for_ambient_noise(mic, duration=0.5)
                 audio = self.r.listen(mic, timeout=5, phrase_time_limit=15)
-            texto = self.r.recognize_google(audio, language="pt-BR")
-            return texto
-        except sr.WaitTimeoutError:
-            return ""
-        except sr.UnknownValueError:
-            return ""
+            return self.r.recognize_google(audio, language="pt-BR")
         except Exception:
             return ""
 
@@ -64,244 +65,646 @@ class AnalisadorTexto(AssistenteBase):
     def __init__(self, nome="Analisador"):
         super().__init__(nome)
 
-    def resumir(self, texto: str) -> str:
+    def resumir(self, texto):
         frases = sent_tokenize(texto, language="portuguese")
         if len(frases) <= 2:
-            return texto.strip() if texto.strip() else ""
-        n = max(1, len(frases)//2)
-        return " ".join(frases[:n])
+            return texto.strip()
+        return " ".join(frases[:max(1, len(frases) // 2)])
 
 class Persistencia(AssistenteBase):
-    def __init__(self, db_path="historico_eduvoice.db"):
+    def __init__(self, db="historico_eduvoice.db"):
         super().__init__("Persistencia")
-        self.db_path = db_path
-        self._init_db()
+        self.db = db
+        self._init()
 
-    def _init_db(self):
-        con = sqlite3.connect(self.db_path)
+    def _init(self):
+        con = sqlite3.connect(self.db)
         cur = con.cursor()
-        cur.execute("""
-        CREATE TABLE IF NOT EXISTS historico (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            ts TEXT NOT NULL,
-            acao TEXT NOT NULL,
-            entrada TEXT,
-            saida TEXT
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS historico (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ts TEXT NOT NULL,
+                acao TEXT NOT NULL,
+                entrada TEXT,
+                saida TEXT
+            )
+            """
         )
-        """)
         con.commit()
         con.close()
 
-    def salvar(self, acao: str, entrada: str, saida: str):
-        con = sqlite3.connect(self.db_path)
+    def salvar(self, acao, entrada, saida):
+        con = sqlite3.connect(self.db)
         cur = con.cursor()
         cur.execute(
-            "INSERT INTO historico(ts, acao, entrada, saida) VALUES(?,?,?,?)",
+            "INSERT INTO historico(ts,acao,entrada,saida) VALUES(?,?,?,?)",
             (datetime.datetime.now().isoformat(timespec="seconds"), acao, entrada, saida),
         )
         con.commit()
         con.close()
 
-    def listar(self, limite=30):
-        con = sqlite3.connect(self.db_path)
+    def listar(self, limite=40):
+        con = sqlite3.connect(self.db)
         cur = con.cursor()
         cur.execute(
-            "SELECT ts, acao, substr(entrada,1,80), substr(saida,1,120) FROM historico ORDER BY id DESC LIMIT ?",
+            """
+            SELECT ts,acao,
+                   substr(entrada,1,120),
+                   substr(saida,1,160)
+            FROM historico
+            ORDER BY id DESC
+            LIMIT ?
+            """,
             (limite,),
         )
-        rows = cur.fetchall()
+        r = cur.fetchall()
         con.close()
-        return rows
+        return r
+
+    def stats_acoes(self):
+        con = sqlite3.connect(self.db)
+        cur = con.cursor()
+        cur.execute(
+            """
+            SELECT acao, COUNT(*) 
+            FROM historico
+            GROUP BY acao
+            ORDER BY COUNT(*) DESC
+            """
+        )
+        r = cur.fetchall()
+        con.close()
+        return r
 
 class AppGUI(ctk.CTk, AssistenteBase):
-    def __init__(self):
-        ctk.set_appearance_mode("light")
+    def __init__(self, tema="dark"):
+        ctk.set_appearance_mode(tema)
         ctk.set_default_color_theme("blue")
-        super().__init__()
-        AssistenteBase.__init__(self, "EduVoice GUI")
-        self.geometry("980x680")
-        self.minsize(920, 640)
-        self.title("Assistente de Inclusão Escolar — EduVoice")
+        ctk.CTk.__init__(self)
+        AssistenteBase.__init__(self, "EduVoice")
+
+        self.geometry("1200x750")
+        self.minsize(1100, 700)
+        self.title("📘 EduVoice — Assistente Escolar")
+
         self.leitor = LeitorVoz()
         self.ouvinte = OuvinteVoz()
         self.analisador = AnalisadorTexto()
         self.db = Persistencia()
-        self._tocando = False
-        self._build_ui()
-        self._carregar_historico()
 
-    def _build_ui(self):
+        self._pages = {}
+
+        self._layout()
+        self._criar_paginas()
+        self._mostrar("inicio")
+
+    def _layout(self):
+        self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(0, weight=1)
-        self.grid_columnconfigure(0, weight=1)
 
-        main = ctk.CTkFrame(self, corner_radius=16)
-        main.grid(row=0, column=0, sticky="nsew", padx=16, pady=16)
-        main.grid_rowconfigure(1, weight=1)
-        main.grid_columnconfigure(0, weight=3)
-        main.grid_columnconfigure(1, weight=2)
+        self.sidebar = ctk.CTkFrame(self, width=190, corner_radius=0)
+        self.sidebar.grid(row=0, column=0, sticky="nsw")
+        self.sidebar.grid_rowconfigure(10, weight=1)
 
-        header = ctk.CTkFrame(main, height=64, corner_radius=16)
-        header.grid(row=0, column=0, columnspan=2, sticky="ew", padx=8, pady=(8,12))
-        header.grid_columnconfigure(0, weight=1)
-        title = ctk.CTkLabel(header, text="Assistente de Inclusão Escolar — EduVoice",
-                              font=ctk.CTkFont(size=22, weight="bold"))
-        subtitle = ctk.CTkLabel(header, text="Leitura em voz alta • Resumo de texto • Voz → Texto",
-                                font=ctk.CTkFont(size=14))
-        title.grid(row=0, column=0, sticky="w", padx=16, pady=(10,0))
-        subtitle.grid(row=1, column=0, sticky="w", padx=16, pady=(0,10))
+        titulo = ctk.CTkLabel(
+            self.sidebar,
+            text="📘 EduVoice",
+            font=ctk.CTkFont(size=24, weight="bold"),
+        )
+        titulo.grid(row=0, column=0, pady=(25, 30), padx=20, sticky="w")
 
-        left = ctk.CTkFrame(main, corner_radius=16)
-        left.grid(row=1, column=0, sticky="nsew", padx=(8,6), pady=(0,8))
-        left.grid_rowconfigure(1, weight=1)
-        left.grid_columnconfigure(0, weight=1)
+        self._btn_inicio = ctk.CTkButton(
+            self.sidebar,
+            text="🏠 Início",
+            command=lambda: self._mostrar("inicio"),
+        )
+        self._btn_leitura = ctk.CTkButton(
+            self.sidebar,
+            text="📖 Ler Texto",
+            command=lambda: self._mostrar("leitura"),
+        )
+        self._btn_voz = ctk.CTkButton(
+            self.sidebar,
+            text="🎤 Voz → Texto",
+            command=lambda: self._mostrar("voz"),
+        )
+        self._btn_resumo = ctk.CTkButton(
+            self.sidebar,
+            text="📝 Resumo",
+            command=lambda: self._mostrar("resumo"),
+        )
+        self._btn_atividade = ctk.CTkButton(
+            self.sidebar,
+            text="📚 Atividade",
+            command=lambda: self._mostrar("atividade"),
+        )
+        self._btn_hist = ctk.CTkButton(
+            self.sidebar,
+            text="🗂 Histórico",
+            command=self._popup_historico,
+        )
+        self._btn_config = ctk.CTkButton(
+            self.sidebar,
+            text="⚙ Configurações",
+            command=lambda: self._mostrar("config"),
+        )
 
-        lbl_in = ctk.CTkLabel(left, text="Texto de entrada", font=ctk.CTkFont(size=14, weight="bold"))
-        lbl_in.grid(row=0, column=0, sticky="w", padx=12, pady=(12,4))
+        self._btn_inicio.grid(row=1, column=0, padx=20, pady=6, sticky="ew")
+        self._btn_leitura.grid(row=2, column=0, padx=20, pady=6, sticky="ew")
+        self._btn_voz.grid(row=3, column=0, padx=20, pady=6, sticky="ew")
+        self._btn_resumo.grid(row=4, column=0, padx=20, pady=6, sticky="ew")
+        self._btn_atividade.grid(row=5, column=0, padx=20, pady=6, sticky="ew")
+        self._btn_hist.grid(row=6, column=0, padx=20, pady=6, sticky="ew")
+        self._btn_config.grid(row=7, column=0, padx=20, pady=6, sticky="ew")
 
-        self.txt_in = ctk.CTkTextbox(left, height=260, corner_radius=12)
-        self.txt_in.grid(row=1, column=0, sticky="nsew", padx=12, pady=(0,12))
+        self.toggle = ctk.CTkButton(
+            self.sidebar,
+            text="🌙",
+            width=50,
+            command=self._alternar_tema,
+        )
+        self.toggle.grid(row=11, column=0, pady=10)
 
-        actions = ctk.CTkFrame(left, corner_radius=12)
-        actions.grid(row=2, column=0, sticky="ew", padx=12, pady=(0,12))
-        actions.grid_columnconfigure((0,1,2,3), weight=1)
+        self.frame_principal = ctk.CTkFrame(self, corner_radius=0)
+        self.frame_principal.grid(row=0, column=1, sticky="nsew")
 
-        self.btn_ler = ctk.CTkButton(actions, text="🔊 Ler Texto", command=self._on_ler)
-        self.btn_falar = ctk.CTkButton(actions, text="🎙️ Voz → Texto", command=self._on_ouvir)
-        self.btn_resumir = ctk.CTkButton(actions, text="📚 Resumir", command=self._on_resumir)
-        self.btn_parar = ctk.CTkButton(actions, text="⏹ Parar Áudio", command=self._on_parar)
-        self.btn_ler.grid(row=0, column=0, padx=8, pady=8, sticky="ew")
-        self.btn_falar.grid(row=0, column=1, padx=8, pady=8, sticky="ew")
-        self.btn_resumir.grid(row=0, column=2, padx=8, pady=8, sticky="ew")
-        self.btn_parar.grid(row=0, column=3, padx=8, pady=8, sticky="ew")
+        self.status_bar = ctk.CTkLabel(self, text="Pronto", anchor="w")
+        self.status_bar.grid(row=1, column=0, columnspan=2, sticky="ew", padx=10, pady=(0, 5))
 
-        lbl_out = ctk.CTkLabel(left, text="Saída / Resumo", font=ctk.CTkFont(size=14, weight="bold"))
-        lbl_out.grid(row=3, column=0, sticky="w", padx=12, pady=(0,4))
-        self.txt_out = ctk.CTkTextbox(left, height=160, corner_radius=12)
-        self.txt_out.grid(row=4, column=0, sticky="nsew", padx=12, pady=(0,12))
-
-        bottom = ctk.CTkFrame(left, corner_radius=12)
-        bottom.grid(row=5, column=0, sticky="ew", padx=12, pady=(0,12))
-        bottom.grid_columnconfigure((0,1,2), weight=1)
-        self.btn_salvar = ctk.CTkButton(bottom, text="💾 Salvar no Histórico", command=self._on_salvar)
-        self.btn_limpar = ctk.CTkButton(bottom, text="🧹 Limpar", command=self._on_limpar)
-        self.btn_copiar = ctk.CTkButton(bottom, text="📋 Copiar Saída", command=self._on_copiar)
-        self.btn_salvar.grid(row=0, column=0, padx=6, pady=8, sticky="ew")
-        self.btn_limpar.grid(row=0, column=1, padx=6, pady=8, sticky="ew")
-        self.btn_copiar.grid(row=0, column=2, padx=6, pady=8, sticky="ew")
-
-        right = ctk.CTkFrame(main, corner_radius=16)
-        right.grid(row=1, column=1, sticky="nsew", padx=(6,8), pady=(0,8))
-        right.grid_rowconfigure(1, weight=1)
-        right.grid_columnconfigure(0, weight=1)
-
-        lbl_hist = ctk.CTkLabel(right, text="Histórico", font=ctk.CTkFont(size=14, weight="bold"))
-        lbl_hist.grid(row=0, column=0, sticky="w", padx=12, pady=(12,4))
-
-        self.hist_box = ctk.CTkTextbox(right, state="disabled", corner_radius=12)
-        self.hist_box.grid(row=1, column=0, sticky="nsew", padx=12, pady=(0,12))
-
-        self.status = ctk.CTkLabel(self, text="Pronto", anchor="w")
-        self.status.grid(row=1, column=0, sticky="ew", padx=16, pady=(0,10))
-
-    def _set_status(self, msg: str):
-        self.status.configure(text=msg)
+    def _set_status(self, msg):
+        self.status_bar.configure(text=msg)
         self.update_idletasks()
 
-    def _append_hist_view(self, linhas):
-        self.hist_box.configure(state="normal")
-        self.hist_box.delete("1.0", "end")
-        for ts, acao, entrada, saida in linhas:
-            self.hist_box.insert("end", f"[{ts}] {acao}\n")
-            if entrada: self.hist_box.insert("end", f"  In: {entrada}\n")
-            if saida: self.hist_box.insert("end", f"  Out: {saida}\n")
-            self.hist_box.insert("end", "—"*40 + "\n")
-        self.hist_box.configure(state="disabled")
+    def _criar_paginas(self):
+        self._pages["inicio"] = self._build_inicio
+        self._pages["leitura"] = self._build_leitura
+        self._pages["voz"] = self._build_voz
+        self._pages["resumo"] = self._build_resumo
+        self._pages["atividade"] = self._build_atividade
+        self._pages["config"] = self._build_config
 
-    def _carregar_historico(self):
-        linhas = self.db.listar(30)
-        self._append_hist_view(linhas)
+    def _mostrar(self, nome):
+        for widget in self.frame_principal.winfo_children():
+            widget.destroy()
+        frame = self._pages[nome]()
+        frame.pack(fill="both", expand=True)
+
+    def _build_inicio(self):
+        f = ctk.CTkFrame(self.frame_principal)
+
+        icon = ctk.CTkLabel(
+            f,
+            text="📘",
+            font=ctk.CTkFont(size=70, weight="bold"),
+        )
+        icon.pack(pady=(40, 10))
+
+        title = ctk.CTkLabel(
+            f,
+            text="Bem-vindo ao EduVoice",
+            font=ctk.CTkFont(size=32, weight="bold"),
+        )
+        title.pack(pady=(0, 5))
+
+        subtitle = ctk.CTkLabel(
+            f,
+            text="Assistente escolar para leitura, escrita e acessibilidade",
+            font=ctk.CTkFont(size=18),
+        )
+        subtitle.pack(pady=(0, 25))
+
+        cards = ctk.CTkFrame(f, corner_radius=18)
+        cards.pack(pady=10, padx=80, fill="x")
+
+        btn1 = ctk.CTkButton(
+            cards,
+            text="📖  Leitura em voz alta",
+            height=40,
+            command=lambda: self._mostrar("leitura"),
+        )
+        btn2 = ctk.CTkButton(
+            cards,
+            text="📝  Resumos automáticos",
+            height=40,
+            command=lambda: self._mostrar("resumo"),
+        )
+        btn3 = ctk.CTkButton(
+            cards,
+            text="🎤  Voz para texto",
+            height=40,
+            command=lambda: self._mostrar("voz"),
+        )
+        btn4 = ctk.CTkButton(
+            cards,
+            text="📚  Atividades escolares",
+            height=40,
+            command=lambda: self._mostrar("atividade"),
+        )
+
+        btn1.pack(pady=8, padx=30, fill="x")
+        btn2.pack(pady=8, padx=30, fill="x")
+        btn3.pack(pady=8, padx=30, fill="x")
+        btn4.pack(pady=8, padx=30, fill="x")
+
+        stats_frame = ctk.CTkFrame(f, corner_radius=18)
+        stats_frame.pack(pady=25, padx=80, fill="x")
+
+        lbl_stats = ctk.CTkLabel(
+            stats_frame,
+            text="Resumo de uso recente",
+            font=ctk.CTkFont(size=18, weight="bold"),
+        )
+        lbl_stats.pack(pady=(10, 5))
+
+        stats = self.db.stats_acoes()
+        if stats:
+            for acao, qtd in stats[:4]:
+                txt = f"{acao}: {qtd} registro(s)"
+                ctk.CTkLabel(
+                    stats_frame,
+                    text=txt,
+                    font=ctk.CTkFont(size=14),
+                ).pack(pady=2)
+        else:
+            ctk.CTkLabel(
+                stats_frame,
+                text="Nenhum dado registrado ainda.",
+                font=ctk.CTkFont(size=14),
+            ).pack(pady=10)
+
+        return f
+
+    def _build_leitura(self):
+        f = ctk.CTkFrame(self.frame_principal)
+
+        lbl = ctk.CTkLabel(
+            f,
+            text="Leitura de Texto",
+            font=ctk.CTkFont(size=22, weight="bold"),
+        )
+        lbl.pack(pady=15)
+
+        self.txt_in = ctk.CTkTextbox(f)
+        self.txt_in.pack(fill="both", expand=True, padx=20, pady=10)
+
+        btns = ctk.CTkFrame(f)
+        btns.pack(pady=10)
+
+        ctk.CTkButton(
+            btns,
+            text="🔊 Ler",
+            width=150,
+            command=self._on_ler,
+        ).grid(row=0, column=0, padx=6)
+        ctk.CTkButton(
+            btns,
+            text="⏹ Parar",
+            width=150,
+            command=self._on_parar,
+        ).grid(row=0, column=1, padx=6)
+
+        ctk.CTkButton(
+            f,
+            text="💾 Salvar no histórico",
+            command=self._salvar_leitura_hist,
+        ).pack(pady=(0, 10))
+
+        return f
+
+    def _build_voz(self):
+        f = ctk.CTkFrame(self.frame_principal)
+
+        lbl = ctk.CTkLabel(
+            f,
+            text="Voz → Texto",
+            font=ctk.CTkFont(size=22, weight="bold"),
+        )
+        lbl.pack(pady=15)
+
+        self.txt_out_voz = ctk.CTkTextbox(f, height=200)
+        self.txt_out_voz.pack(fill="both", expand=True, padx=20, pady=20)
+
+        ctk.CTkButton(
+            f,
+            text="🎤 Ouvir e Transcrever",
+            width=180,
+            command=self._on_ouvir,
+        ).pack(pady=10)
+
+        ctk.CTkButton(
+            f,
+            text="💾 Salvar transcrição",
+            command=self._salvar_voz_hist,
+        ).pack(pady=5)
+
+        return f
+
+    def _build_resumo(self):
+        f = ctk.CTkFrame(self.frame_principal)
+
+        lbl = ctk.CTkLabel(
+            f,
+            text="Resumo Inteligente",
+            font=ctk.CTkFont(size=22, weight="bold"),
+        )
+        lbl.pack(pady=15)
+
+        self.txt_resumo_in = ctk.CTkTextbox(f, height=200)
+        self.txt_resumo_in.pack(fill="both", expand=True, padx=20, pady=8)
+
+        self.txt_resumo_out = ctk.CTkTextbox(f, height=150)
+        self.txt_resumo_out.pack(fill="both", expand=True, padx=20, pady=8)
+
+        btns = ctk.CTkFrame(f)
+        btns.pack(pady=10)
+
+        ctk.CTkButton(
+            btns,
+            text="📘 Resumir",
+            width=150,
+            command=self._on_resumir,
+        ).grid(row=0, column=0, padx=6)
+        ctk.CTkButton(
+            btns,
+            text="💾 Exportar resumo",
+            width=170,
+            command=self._exportar_resumo,
+        ).grid(row=0, column=1, padx=6)
+
+        return f
+
+    def _build_atividade(self):
+        f = ctk.CTkFrame(self.frame_principal)
+
+        lbl = ctk.CTkLabel(
+            f,
+            text="Gerador de Atividade Escolar",
+            font=ctk.CTkFont(size=22, weight="bold"),
+        )
+        lbl.pack(pady=20)
+
+        self.txt_ativ_in = ctk.CTkTextbox(f, height=150)
+        self.txt_ativ_in.pack(fill="both", padx=20, pady=10)
+
+        self.txt_ativ_out = ctk.CTkTextbox(f, height=200)
+        self.txt_ativ_out.pack(fill="both", expand=True, padx=20, pady=10)
+
+        btns = ctk.CTkFrame(f)
+        btns.pack(pady=10)
+
+        ctk.CTkButton(
+            btns,
+            text="📚 Gerar Atividade",
+            command=self._gerar_atividade,
+        ).grid(row=0, column=0, padx=6)
+        ctk.CTkButton(
+            btns,
+            text="💾 Exportar atividade",
+            command=self._exportar_atividade,
+        ).grid(row=0, column=1, padx=6)
+
+        return f
+
+    def _build_config(self):
+        f = ctk.CTkFrame(self.frame_principal)
+
+        lbl = ctk.CTkLabel(
+            f,
+            text="Configurações e Ferramentas Avançadas",
+            font=ctk.CTkFont(size=22, weight="bold"),
+        )
+        lbl.pack(pady=20)
+
+        ctk.CTkLabel(
+            f,
+            text="Tema da interface",
+            font=ctk.CTkFont(size=16),
+        ).pack(pady=5)
+        ctk.CTkButton(
+            f,
+            text="🌙 Alternar Tema",
+            width=200,
+            command=self._alternar_tema,
+        ).pack(pady=10)
+
+        ctk.CTkLabel(
+            f,
+            text="Ferramentas avançadas",
+            font=ctk.CTkFont(size=16),
+        ).pack(pady=(25, 5))
+
+        ctk.CTkButton(
+            f,
+            text="🧠 Modo Foco de Escrita",
+            width=230,
+            command=self._modo_foco,
+        ).pack(pady=6)
+
+        ctk.CTkButton(
+            f,
+            text="📊 Ver gráfico de uso",
+            width=230,
+            command=self._popup_grafico_uso,
+        ).pack(pady=6)
+
+        return f
+
+    def _alternar_tema(self):
+        tema = ctk.get_appearance_mode()
+        if tema == "Light":
+            ctk.set_appearance_mode("dark")
+        else:
+            ctk.set_appearance_mode("light")
+
+    def _popup_historico(self):
+        win = ctk.CTkToplevel(self)
+        win.title("Histórico de uso")
+        win.geometry("700x520")
+
+        box = ctk.CTkTextbox(win)
+        box.pack(fill="both", expand=True, padx=20, pady=20)
+
+        for ts, acao, ent, sai in self.db.listar():
+            box.insert("end", f"[{ts}] {acao}\n")
+            if ent:
+                box.insert("end", f"  In: {ent}\n")
+            if sai:
+                box.insert("end", f"  Out: {sai}\n")
+            box.insert("end", "-" * 40 + "\n")
+
+        box.configure(state="disabled")
+
+    def _popup_grafico_uso(self):
+        stats = self.db.stats_acoes()
+        win = ctk.CTkToplevel(self)
+        win.title("Gráfico de uso do EduVoice")
+        win.geometry("700x500")
+        if not stats:
+            ctk.CTkLabel(
+                win,
+                text="Nenhum dado disponível para gerar gráfico.",
+                font=ctk.CTkFont(size=16),
+            ).pack(pady=40)
+            return
+        if not MATPLOT:
+            ctk.CTkLabel(
+                win,
+                text="matplotlib não está instalado.\nInstale com: pip install matplotlib",
+                font=ctk.CTkFont(size=16),
+            ).pack(pady=40)
+            return
+        acoes = [a for a, _ in stats]
+        valores = [v for _, v in stats]
+        fig = plt.Figure(figsize=(6, 4))
+        ax = fig.add_subplot(111)
+        ax.bar(acoes, valores)
+        ax.set_title("Ações registradas")
+        ax.set_ylabel("Quantidade")
+        ax.set_xlabel("Tipo de ação")
+        fig.tight_layout()
+        canvas = FigureCanvasTkAgg(fig, master=win)
+        canvas.draw()
+        canvas.get_tk_widget().pack(fill="both", expand=True, padx=10, pady=10)
+
+    def _modo_foco(self):
+        win = ctk.CTkToplevel(self)
+        win.title("Modo Foco de Escrita")
+        win.geometry("900x600")
+        win.grab_set()
+        lbl = ctk.CTkLabel(
+            win,
+            text="Modo Foco — escreva sem distrações",
+            font=ctk.CTkFont(size=20, weight="bold"),
+        )
+        lbl.pack(pady=10)
+        txt = ctk.CTkTextbox(win, font=ctk.CTkFont(size=16))
+        txt.pack(fill="both", expand=True, padx=20, pady=10)
+        def salvar():
+            conteudo = txt.get("1.0", "end").strip()
+            if not conteudo:
+                return
+            nome = f"foco_{int(time.time())}.txt"
+            with open(nome, "w", encoding="utf-8") as arq:
+                arq.write(conteudo)
+            self.db.salvar("ModoFoco", "", f"Arquivo: {nome}")
+            self._set_status(f"Modo foco salvo em {nome}")
+        ctk.CTkButton(
+            win,
+            text="💾 Salvar texto do foco",
+            command=salvar,
+        ).pack(pady=10)
 
     def _on_ler(self):
-        texto = self.txt_in.get("1.0", "end").strip()
-        if not texto:
-            self._set_status("Nenhum texto para ler.")
+        if not hasattr(self, "txt_in"):
             return
-        self._set_status("Gerando áudio…")
+        t = self.txt_in.get("1.0", "end").strip()
+        if not t:
+            return
+        self._set_status("Gerando áudio e lendo texto.")
         def run():
             try:
-                self.leitor.parar()
-                mp3 = self.leitor.falar(texto)
-                self._set_status("Reproduzindo…")
-                self._tocando = True
-                self.leitor.aguardaraudio()
-                self._tocando = False
-                self.db.salvar("LerTexto", texto, f"[áudio]{os.path.basename(mp3)}")
-                self._carregar_historico()
+                mp3 = self.leitor.falar(t)
+                self.leitor.esperar()
+                self.db.salvar("Leitura", t, f"[audio]{os.path.basename(mp3)}")
                 self._set_status("Leitura concluída.")
-            except Exception as e:
-                self._set_status(f"Erro ao ler: {e}")
+            except Exception:
+                self._set_status("Erro ao ler texto.")
         threading.Thread(target=run, daemon=True).start()
+
+    def _salvar_leitura_hist(self):
+        if not hasattr(self, "txt_in"):
+            return
+        t = self.txt_in.get("1.0", "end").strip()
+        if not t:
+            return
+        self.db.salvar("LeituraManual", t, "")
+        self._set_status("Leitura salva no histórico.")
 
     def _on_parar(self):
         try:
             self.leitor.parar()
-            self._tocando = False
             self._set_status("Áudio parado.")
         except Exception:
             self._set_status("Não foi possível parar o áudio.")
 
     def _on_ouvir(self):
-        self._set_status("Ouvindo microfone…")
+        self._set_status("Ouvindo microfone...")
         def run():
-            try:
-                texto = self.ouvinte.ouvir()
-                if texto:
-                    self.txt_out.insert("end", f"(Voz) {texto}\n")
-                    self.db.salvar("Voz->Texto", "", texto)
-                    self._carregar_historico()
-                    self._set_status("Voz convertida com sucesso.")
-                else:
-                    self._set_status("Nada reconhecido.")
-            except Exception as e:
-                self._set_status(f"Erro ao ouvir: {e}")
+            txt = self.ouvinte.ouvir()
+            if txt:
+                if hasattr(self, "txt_out_voz"):
+                    self.txt_out_voz.insert("end", txt + "\n")
+                self.db.salvar("Voz->Texto", "", txt)
+                self._set_status("Voz convertida com sucesso.")
+            else:
+                self._set_status("Nada reconhecido.")
         threading.Thread(target=run, daemon=True).start()
+
+    def _salvar_voz_hist(self):
+        if not hasattr(self, "txt_out_voz"):
+            return
+        conteudo = self.txt_out_voz.get("1.0", "end").strip()
+        if not conteudo:
+            return
+        self.db.salvar("SalvarVozTexto", "", conteudo)
+        self._set_status("Transcrição salva no histórico.")
 
     def _on_resumir(self):
-        texto = self.txt_in.get("1.0", "end").strip()
-        if not texto:
-            self._set_status("Nenhum texto para resumir.")
+        if not hasattr(self, "txt_resumo_in"):
             return
-        self._set_status("Resumindo…")
-        def run():
-            try:
-                resumo = self.analisador.resumir(texto)
-                if not resumo.strip():
-                    resumo = "Sem conteúdo para resumir."
-                self.txt_out.insert("end", f"(Resumo) {resumo}\n")
-                self.db.salvar("Resumo", texto[:4000], resumo[:4000])
-                self._carregar_historico()
-                self._set_status("Resumo concluído.")
-            except Exception as e:
-                self._set_status(f"Erro ao resumir: {e}")
-        threading.Thread(target=run, daemon=True).start()
+        t = self.txt_resumo_in.get("1.0", "end").strip()
+        if not t:
+            return
+        self._set_status("Gerando resumo...")
+        resumo = self.analisador.resumir(t)
+        if hasattr(self, "txt_resumo_out"):
+            self.txt_resumo_out.insert("end", resumo + "\n")
+        self.db.salvar("Resumo", t, resumo)
+        self._set_status("Resumo concluído.")
 
-    def _on_salvar(self):
-        entrada = self.txt_in.get("1.0", "end").strip()
-        saida = self.txt_out.get("1.0", "end").strip()
-        self.db.salvar("Salvar", entrada[:4000], saida[:4000])
-        self._carregar_historico()
-        self._set_status("Registro salvo no histórico.")
+    def _exportar_resumo(self):
+        if not hasattr(self, "txt_resumo_out"):
+            return
+        conteudo = self.txt_resumo_out.get("1.0", "end").strip()
+        if not conteudo:
+            return
+        nome = f"resumo_{int(time.time())}.txt"
+        with open(nome, "w", encoding="utf-8") as arq:
+            arq.write(conteudo)
+        self.db.salvar("ExportarResumo", "", nome)
+        self._set_status(f"Resumo exportado para {nome}")
 
-    def _on_limpar(self):
-        self.txt_in.delete("1.0", "end")
-        self.txt_out.delete("1.0", "end")
-        self._set_status("Limpo.")
+    def _gerar_atividade(self):
+        if not hasattr(self, "txt_ativ_in"):
+            return
+        texto = self.txt_ativ_in.get("1.0", "end").strip()
+        if not texto:
+            return
+        perguntas = [
+            "1) Qual é a ideia principal do texto?",
+            "2) Explique com suas palavras um ponto importante mencionado.",
+            "3) Crie um título alternativo para o texto.",
+            "4) Cite duas informações relevantes presentes no texto.",
+            "5) O que você aprendeu com este conteúdo?",
+        ]
+        out = "\n".join(perguntas)
+        if hasattr(self, "txt_ativ_out"):
+            self.txt_ativ_out.insert("end", out + "\n")
+        self.db.salvar("Atividade", texto, out)
+        self._set_status("Atividade gerada.")
 
-    def _on_copiar(self):
-        saida = self.txt_out.get("1.0", "end")
-        self.clipboard_clear()
-        self.clipboard_append(saida)
-        self._set_status("Saída copiada.")
+    def _exportar_atividade(self):
+        if not hasattr(self, "txt_ativ_out"):
+            return
+        conteudo = self.txt_ativ_out.get("1.0", "end").strip()
+        if not conteudo:
+            return
+        nome = f"atividade_{int(time.time())}.txt"
+        with open(nome, "w", encoding="utf-8") as arq:
+            arq.write(conteudo)
+        self.db.salvar("ExportarAtividade", "", nome)
+        self._set_status(f"Atividade exportada para {nome}")
 
 if __name__ == "__main__":
     app = AppGUI()

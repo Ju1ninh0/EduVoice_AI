@@ -1,42 +1,25 @@
-import sqlite3, datetime
-
+import os, json, datetime
 class Persistencia:
-    def __init__(self, db_path="historico_assistente_escolar.db"):
-        self.db_path = db_path
-        self._init_db()
-
-    def _init_db(self):
-        con = sqlite3.connect(self.db_path)
-        cur = con.cursor()
-        cur.execute("""
-        CREATE TABLE IF NOT EXISTS historico (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            ts TEXT NOT NULL,
-            acao TEXT NOT NULL,
-            entrada TEXT,
-            saida TEXT
-        )
-        """)
-        con.commit()
-        con.close()
-
-    def salvar(self, acao, entrada, saida):
-        con = sqlite3.connect(self.db_path)
-        cur = con.cursor()
-        cur.execute(
-            "INSERT INTO historico(ts, acao, entrada, saida) VALUES(?,?,?,?)",
-            (datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), acao, entrada, saida)
-        )
-        con.commit()
-        con.close()
-
-    def listar(self, limite=30):
-        con = sqlite3.connect(self.db_path)
-        cur = con.cursor()
-        cur.execute(
-            "SELECT ts, acao, substr(entrada,1,80), substr(saida,1,120) FROM historico ORDER BY id DESC LIMIT ?",
-            (limite,)
-        )
-        rows = cur.fetchall()
-        con.close()
-        return rows
+    def __init__(self, path=None):
+        self.path = path or os.path.join(os.getcwd(), "historico_assistente_escolar.jsonl")
+        if not os.path.exists(self.path):
+            open(self.path, "a", encoding="utf-8").close()
+    def salvar(self, kind, texto, resumo):
+        row = {"ts": datetime.datetime.now().isoformat(timespec="seconds"), "kind": kind, "texto": texto or "", "resumo": resumo or ""}
+        with open(self.path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(row, ensure_ascii=False) + "\n")
+    def listar(self, limit=200):
+        out = []
+        try:
+            with open(self.path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        out.append(json.loads(line))
+                    except Exception:
+                        continue
+        except Exception:
+            return []
+        return out[-limit:]

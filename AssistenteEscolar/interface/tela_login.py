@@ -5,7 +5,7 @@ class TelaLogin(ctk.CTk):
     def __init__(self):
         super().__init__()
         self.title("Login — EduVoice")
-        self.geometry("400x360")
+        self.geometry("400×360")
         self.resizable(False, False)
         ctk.set_appearance_mode("light")
         ctk.set_default_color_theme("blue")
@@ -49,12 +49,15 @@ class TelaLogin(ctk.CTk):
     def verificar_login(self):
         usuario = self.entry_user.get().strip()
         senha = self.entry_pass.get().strip()
+
         if usuario == "admin" and senha == "123":
+            tema_atual = ctk.get_appearance_mode()
             self.destroy()
-            app = AppGUI()
+            app = AppGUI(tema=tema_atual)
             app.mainloop()
         else:
             self.label_status.configure(text="Usuário ou senha incorretos.")
+
 
 if __name__ == "__main__":
     app = TelaLogin()
