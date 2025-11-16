@@ -1,49 +1,20 @@
-EduVoice – Assistente Escolar
+EduVoice
 
-EduVoice é um assistente escolar desenvolvido em Python, focado em acessibilidade, produtividade e apoio ao estudo.
-A aplicação oferece leitura em voz alta, transcrição de voz, geração de resumos, criação automática de atividades e ferramentas de escrita sem distrações.
+Assistente escolar desenvolvido em Python, focado em leitura, escrita e produtividade.
 
-Funcionalidades
-Leitura de Texto
+Recursos
 
-Leitura em voz alta utilizando síntese de voz (gTTS).
+Leitura de texto
 
-Salvamento automático no histórico.
+Voz para texto
 
-Voz para Texto
+Resumo automático
 
-Transcrição de áudio por microfone usando SpeechRecognition.
+Gerador de atividades
 
-Opção para salvar transcrições.
+Modo foco
 
-Resumo de Conteúdo
+Histórico e estatísticas
 
-Geração automática de resumos com NLTK.
 
-Exportação em arquivo .txt.
-
-Gerador de Atividades
-
-Produção automática de cinco questões baseadas no texto informado.
-
-Indicado para estudos e apoio escolar.
-
-Modo Foco
-
-Ambiente minimalista para escrita sem distrações.
-
-Suporte para salvar e reabrir o último texto.
-
-Histórico e Análises
-
-Registro de todas as ações via SQLite.
-
-Gráficos de utilização com Matplotlib.
-
-Configurações
-
-Alternância entre tema claro e escuro.
-
-Acesso rápido a ferramentas adicionais.
-
-*AINDA EM DESENVOLVIMENTO*
+AINDA EM DESENVOLVIMENTO
