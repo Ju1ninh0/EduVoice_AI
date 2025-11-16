@@ -14,9 +14,11 @@ try:
 except Exception:
     MATPLOT = False
 
+
 class AssistenteBase:
     def __init__(self, nome="EduVoice"):
         self.nome = nome
+
 
 class LeitorVoz(AssistenteBase):
     def __init__(self, nome="Leitor"):
@@ -47,6 +49,7 @@ class LeitorVoz(AssistenteBase):
         if self._mixer_init:
             pygame.mixer.music.stop()
 
+
 class OuvinteVoz(AssistenteBase):
     def __init__(self, nome="Ouvinte"):
         super().__init__(nome)
@@ -61,6 +64,7 @@ class OuvinteVoz(AssistenteBase):
         except Exception:
             return ""
 
+
 class AnalisadorTexto(AssistenteBase):
     def __init__(self, nome="Analisador"):
         super().__init__(nome)
@@ -71,12 +75,12 @@ class AnalisadorTexto(AssistenteBase):
             return texto.strip()
         return " ".join(frases[:max(1, len(frases) // 2)])
 
+
 class Persistencia(AssistenteBase):
     def __init__(self, db="historico_eduvoice.db"):
         super().__init__("Persistencia")
         self.db = db
         self._init()
-
 
     def _init(self):
         con = sqlite3.connect(self.db)
@@ -138,6 +142,7 @@ class Persistencia(AssistenteBase):
         con.close()
         return r
 
+
 class AppGUI(ctk.CTk, AssistenteBase):
     def __init__(self, tema="dark"):
         ctk.set_appearance_mode(tema)
@@ -147,7 +152,7 @@ class AppGUI(ctk.CTk, AssistenteBase):
 
         self.geometry("1200x750")
         self.minsize(1100, 700)
-        self.title("📘 EduVoice — Assistente Escolar")
+        self.title("EduVoice — Assistente Escolar")
 
         self.leitor = LeitorVoz()
         self.ouvinte = OuvinteVoz()
@@ -170,44 +175,49 @@ class AppGUI(ctk.CTk, AssistenteBase):
 
         titulo = ctk.CTkLabel(
             self.sidebar,
-            text="📘 EduVoice",
+            text="EduVoice",
             font=ctk.CTkFont(size=24, weight="bold"),
         )
         titulo.grid(row=0, column=0, pady=(25, 30), padx=20, sticky="w")
 
         self._btn_inicio = ctk.CTkButton(
             self.sidebar,
-            text="🏠 Início",
+            text="Início",
             command=lambda: self._mostrar("inicio"),
         )
         self._btn_leitura = ctk.CTkButton(
             self.sidebar,
-            text="📖 Ler Texto",
+            text="Ler Texto",
             command=lambda: self._mostrar("leitura"),
         )
         self._btn_voz = ctk.CTkButton(
             self.sidebar,
-            text="🎤 Voz → Texto",
+            text="Voz para Texto",
             command=lambda: self._mostrar("voz"),
         )
         self._btn_resumo = ctk.CTkButton(
             self.sidebar,
-            text="📝 Resumo",
+            text="Resumo",
             command=lambda: self._mostrar("resumo"),
         )
         self._btn_atividade = ctk.CTkButton(
             self.sidebar,
-            text="📚 Atividade",
+            text="Atividade",
             command=lambda: self._mostrar("atividade"),
+        )
+        self._btn_rotina = ctk.CTkButton(
+            self.sidebar,
+            text="Rotina",
+            command=lambda: self._mostrar("rotina"),
         )
         self._btn_hist = ctk.CTkButton(
             self.sidebar,
-            text="🗂 Histórico",
+            text="Histórico",
             command=self._popup_historico,
         )
         self._btn_config = ctk.CTkButton(
             self.sidebar,
-            text="⚙ Configurações",
+            text="Configurações",
             command=lambda: self._mostrar("config"),
         )
 
@@ -217,12 +227,13 @@ class AppGUI(ctk.CTk, AssistenteBase):
         self._btn_resumo.grid(row=4, column=0, padx=20, pady=6, sticky="ew")
         self.__juninho_dev = "@Ju1ninh0"
         self._btn_atividade.grid(row=5, column=0, padx=20, pady=6, sticky="ew")
-        self._btn_hist.grid(row=6, column=0, padx=20, pady=6, sticky="ew")
-        self._btn_config.grid(row=7, column=0, padx=20, pady=6, sticky="ew")
+        self._btn_rotina.grid(row=6, column=0, padx=20, pady=6, sticky="ew")
+        self._btn_hist.grid(row=7, column=0, padx=20, pady=6, sticky="ew")
+        self._btn_config.grid(row=8, column=0, padx=20, pady=6, sticky="ew")
 
         self.toggle = ctk.CTkButton(
             self.sidebar,
-            text="🌙",
+            text="Tema",
             width=50,
             command=self._alternar_tema,
         )
@@ -245,6 +256,7 @@ class AppGUI(ctk.CTk, AssistenteBase):
         self._pages["resumo"] = self._build_resumo
         self._pages["atividade"] = self._build_atividade
         self._pages["config"] = self._build_config
+        self._pages["rotina"] = self._build_rotina
 
     def _mostrar(self, nome):
         for widget in self.frame_principal.winfo_children():
@@ -281,25 +293,25 @@ class AppGUI(ctk.CTk, AssistenteBase):
 
         btn1 = ctk.CTkButton(
             cards,
-            text="📖  Leitura em voz alta",
+            text="Leitura em voz alta",
             height=40,
             command=lambda: self._mostrar("leitura"),
         )
         btn2 = ctk.CTkButton(
             cards,
-            text="📝  Resumos automáticos",
+            text="Resumos automáticos",
             height=40,
             command=lambda: self._mostrar("resumo"),
         )
         btn3 = ctk.CTkButton(
             cards,
-            text="🎤  Voz para texto",
+            text="Voz para texto",
             height=40,
             command=lambda: self._mostrar("voz"),
         )
         btn4 = ctk.CTkButton(
             cards,
-            text="📚  Atividades escolares",
+            text="Atividades escolares",
             height=40,
             command=lambda: self._mostrar("atividade"),
         )
@@ -337,7 +349,6 @@ class AppGUI(ctk.CTk, AssistenteBase):
 
         return f
 
-
     def _build_leitura(self):
         f = ctk.CTkFrame(self.frame_principal)
 
@@ -356,20 +367,20 @@ class AppGUI(ctk.CTk, AssistenteBase):
 
         ctk.CTkButton(
             btns,
-            text="🔊 Ler",
+            text="Ler",
             width=150,
             command=self._on_ler,
         ).grid(row=0, column=0, padx=6)
         ctk.CTkButton(
             btns,
-            text="⏹ Parar",
+            text="Parar",
             width=150,
             command=self._on_parar,
         ).grid(row=0, column=1, padx=6)
 
         ctk.CTkButton(
             f,
-            text="💾 Salvar no histórico",
+            text="Salvar no histórico",
             command=self._salvar_leitura_hist,
         ).pack(pady=(0, 10))
 
@@ -380,7 +391,7 @@ class AppGUI(ctk.CTk, AssistenteBase):
 
         lbl = ctk.CTkLabel(
             f,
-            text="Voz → Texto",
+            text="Voz para Texto",
             font=ctk.CTkFont(size=22, weight="bold"),
         )
         lbl.pack(pady=15)
@@ -390,14 +401,14 @@ class AppGUI(ctk.CTk, AssistenteBase):
 
         ctk.CTkButton(
             f,
-            text="🎤 Ouvir e Transcrever",
+            text="Ouvir e Transcrever",
             width=180,
             command=self._on_ouvir,
         ).pack(pady=10)
 
         ctk.CTkButton(
             f,
-            text="💾 Salvar transcrição",
+            text="Salvar transcrição",
             command=self._salvar_voz_hist,
         ).pack(pady=5)
 
@@ -424,13 +435,13 @@ class AppGUI(ctk.CTk, AssistenteBase):
 
         ctk.CTkButton(
             btns,
-            text="📘 Resumir",
+            text="Resumir",
             width=150,
             command=self._on_resumir,
         ).grid(row=0, column=0, padx=6)
         ctk.CTkButton(
             btns,
-            text="💾 Exportar resumo",
+            text="Exportar resumo",
             width=170,
             command=self._exportar_resumo,
         ).grid(row=0, column=1, padx=6)
@@ -458,12 +469,12 @@ class AppGUI(ctk.CTk, AssistenteBase):
 
         ctk.CTkButton(
             btns,
-            text="📚 Gerar Atividade",
+            text="Gerar Atividade",
             command=self._gerar_atividade,
         ).grid(row=0, column=0, padx=6)
         ctk.CTkButton(
             btns,
-            text="💾 Exportar atividade",
+            text="Exportar atividade",
             command=self._exportar_atividade,
         ).grid(row=0, column=1, padx=6)
 
@@ -486,7 +497,7 @@ class AppGUI(ctk.CTk, AssistenteBase):
         ).pack(pady=5)
         ctk.CTkButton(
             f,
-            text="🌙 Alternar Tema",
+            text="Alternar Tema",
             width=200,
             command=self._alternar_tema,
         ).pack(pady=10)
@@ -499,17 +510,65 @@ class AppGUI(ctk.CTk, AssistenteBase):
 
         ctk.CTkButton(
             f,
-            text="🧠 Modo Foco de Escrita",
+            text="Modo Foco de Escrita",
             width=230,
             command=self._modo_foco,
         ).pack(pady=6)
 
         ctk.CTkButton(
             f,
-            text="📊 Ver gráfico de uso",
+            text="Ver gráfico de uso",
             width=230,
             command=self._popup_grafico_uso,
         ).pack(pady=6)
+
+        return f
+
+    def _build_rotina(self):
+        f = ctk.CTkFrame(self.frame_principal)
+
+        title = ctk.CTkLabel(
+            f,
+            text="Rotina Inteligente",
+            font=ctk.CTkFont(size=28, weight="bold"),
+        )
+        title.pack(pady=(30, 10))
+
+        subtitle = ctk.CTkLabel(
+            f,
+            text="Monte sua rotina de forma simples e organizada",
+            font=ctk.CTkFont(size=16),
+        )
+        subtitle.pack(pady=(0, 20))
+
+        container = ctk.CTkFrame(f, corner_radius=20)
+        container.pack(padx=40, pady=10, fill="x")
+
+        self.entry_acordar = ctk.CTkEntry(container, placeholder_text="Horário que você acorda", height=40)
+        self.entry_faculdade = ctk.CTkEntry(container, placeholder_text="Horário da faculdade", height=40)
+        self.entry_almoco = ctk.CTkEntry(container, placeholder_text="Tempo de almoço", height=40)
+        self.entry_estudo = ctk.CTkEntry(container, placeholder_text="Tempo de estudo", height=40)
+        self.entry_objetivo = ctk.CTkEntry(container, placeholder_text="Objetivo do dia", height=40)
+        self.entry_tarefas = ctk.CTkEntry(container, placeholder_text="Tarefas obrigatórias", height=40)
+
+        self.entry_acordar.pack(pady=6, padx=20, fill="x")
+        self.entry_faculdade.pack(pady=6, padx=20, fill="x")
+        self.entry_almoco.pack(pady=6, padx=20, fill="x")
+        self.entry_estudo.pack(pady=6, padx=20, fill="x")
+        self.entry_objetivo.pack(pady=6, padx=20, fill="x")
+        self.entry_tarefas.pack(pady=6, padx=20, fill="x")
+
+        gerar_btn = ctk.CTkButton(
+            f,
+            text="Gerar Rotina",
+            height=45,
+            font=ctk.CTkFont(size=17, weight="bold"),
+            command=self._gerar_rotina_inteligente
+        )
+        gerar_btn.pack(pady=20)
+
+        self.box_rotina = ctk.CTkTextbox(f, height=250, font=ctk.CTkFont(size=15))
+        self.box_rotina.pack(padx=25, pady=10, fill="both", expand=True)
 
         return f
 
@@ -528,12 +587,42 @@ class AppGUI(ctk.CTk, AssistenteBase):
         box = ctk.CTkTextbox(win)
         box.pack(fill="both", expand=True, padx=20, pady=20)
 
-        for ts, acao, ent, sai in self.db.listar():
+        registros = self.db.listar()
+
+        for ts, acao, ent, sai in registros:
             box.insert("end", f"[{ts}] {acao}\n")
             if ent:
-                box.insert("end", f"  In: {ent}\n")
-            if sai:
+                box.insert("end", f"  Texto: {ent[:300]}...\n")
+
+            if "foco_" in sai:
+                def abrir_arquivo(nome=sai.replace("Arquivo salvo: ", "").strip()):
+                    try:
+                        with open(nome, "r", encoding="utf-8") as f:
+                            conteudo = f.read()
+
+                        modal = ctk.CTkToplevel(self)
+                        modal.title(nome)
+                        modal.geometry("800x600")
+
+                        txt = ctk.CTkTextbox(modal)
+                        txt.pack(fill="both", expand=True, padx=20, pady=20)
+                        txt.insert("1.0", conteudo)
+
+                    except Exception as e:
+                        self._set_status(f"Erro ao abrir arquivo: {e}")
+
+                btn = ctk.CTkButton(
+                    win,
+                    text=f"Abrir {sai.replace('Arquivo salvo: ', '')}",
+                    width=180,
+                    command=abrir_arquivo,
+                )
+                box.window_create("end", window=btn)
+                box.insert("end", "\n")
+
+            elif sai:
                 box.insert("end", f"  Out: {sai}\n")
+
             box.insert("end", "-" * 40 + "\n")
 
         box.configure(state="disabled")
@@ -553,7 +642,7 @@ class AppGUI(ctk.CTk, AssistenteBase):
         if not MATPLOT:
             ctk.CTkLabel(
                 win,
-                text="matplotlib não está instalado.\nInstale com: pip install matplotlib",
+                text="matplotlib não está instalado. Instale com: pip install matplotlib",
                 font=ctk.CTkFont(size=16),
             ).pack(pady=40)
             return
@@ -575,14 +664,45 @@ class AppGUI(ctk.CTk, AssistenteBase):
         win.title("Modo Foco de Escrita")
         win.geometry("900x600")
         win.grab_set()
+
         lbl = ctk.CTkLabel(
             win,
             text="Modo Foco — escreva sem distrações",
             font=ctk.CTkFont(size=20, weight="bold"),
         )
         lbl.pack(pady=10)
+
         txt = ctk.CTkTextbox(win, font=ctk.CTkFont(size=16))
         txt.pack(fill="both", expand=True, padx=20, pady=10)
+
+        def reabrir_ultimo():
+            registros = self.db.listar(limite=1)
+            if registros:
+                acao = registros[0][1]
+                saida = registros[0][3]
+
+                if acao == "ModoFoco" and "foco_" in saida:
+                    nome = saida.replace("Arquivo salvo: ", "").strip()
+                    try:
+                        with open(nome, "r", encoding="utf-8") as f:
+                            conteudo = f.read()
+                            txt.delete("1.0", "end")
+                            txt.insert("1.0", conteudo)
+                            self._set_status(f"Último foco carregado: {nome}")
+                    except:
+                        self._set_status("Não foi possível abrir o último foco.")
+                else:
+                    self._set_status("Nenhum foco salvo encontrado.")
+            else:
+                self._set_status("Nenhum foco salvo encontrado.")
+
+        ctk.CTkButton(
+            win,
+            text="Reabrir último foco",
+            width=180,
+            command=reabrir_ultimo,
+        ).pack(pady=5)
+
         def salvar():
             conteudo = txt.get("1.0", "end").strip()
             if not conteudo:
@@ -590,11 +710,13 @@ class AppGUI(ctk.CTk, AssistenteBase):
             nome = f"foco_{int(time.time())}.txt"
             with open(nome, "w", encoding="utf-8") as arq:
                 arq.write(conteudo)
-            self.db.salvar("ModoFoco", "", f"Arquivo: {nome}")
+            self.db.salvar("ModoFoco", conteudo, f"Arquivo salvo: {nome}")
             self._set_status(f"Modo foco salvo em {nome}")
+
         ctk.CTkButton(
             win,
-            text="💾 Salvar texto do foco",
+            text="Salvar texto do foco",
+            width=180,
             command=salvar,
         ).pack(pady=10)
 
@@ -708,6 +830,45 @@ class AppGUI(ctk.CTk, AssistenteBase):
             arq.write(conteudo)
         self.db.salvar("ExportarAtividade", "", nome)
         self._set_status(f"Atividade exportada para {nome}")
+
+    def _gerar_rotina_inteligente(self):
+        acordar = self.entry_acordar.get().strip()
+        faculdade = self.entry_faculdade.get().strip()
+        almoco = self.entry_almoco.get().strip()
+        estudo = self.entry_estudo.get().strip()
+        objetivo = self.entry_objetivo.get().strip()
+        tarefas = self.entry_tarefas.get().strip()
+
+        rotina = f"""
+Rotina Inteligente — EduVoice
+
+Acordar: {acordar}
+Faculdade: {faculdade}
+Almoço: {almoco}
+Estudo do dia: {estudo}
+
+Objetivo do dia:
+{objetivo}
+
+Tarefas importantes:
+{tarefas}
+
+Sugestão organizada:
+
+{acordar} — Acordar e organizar o ambiente
+{faculdade} — Período de aulas ou deslocamento
+Após faculdade — Almoço ({almoco})
+Tarde — Estudo focado ({estudo}) alinhado ao objetivo
+Noite — Resolver tarefas: {tarefas}
+Antes de dormir — Revisar objetivo do dia: {objetivo}
+"""
+
+        self.box_rotina.delete("1.0", "end")
+        self.box_rotina.insert("1.0", rotina)
+
+        self.db.salvar("Rotina", objetivo, rotina)
+        self._set_status("Rotina gerada e salva.")
+
 
 if __name__ == "__main__":
     app = AppGUI()

@@ -1,12 +1,15 @@
-import os
-import sys
+import customtkinter as ctk
+from splash import MinimalIphoneSplash
+from AssistenteEscolar.interface.app_gui import AppGUI
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-if BASE_DIR not in sys.path:
-    sys.path.insert(0, BASE_DIR)
-
-from AssistenteEscolar.interface.tela_login import TelaLogin
+def abrir_app():
+    app = AppGUI()
+    app.mainloop()
 
 if __name__ == "__main__":
-    print("🚀 Iniciando o Assistente Escolar completo...")
-    TelaLogin().mainloop()
+    root = ctk.CTk()  
+    root.withdraw()
+
+    splash = MinimalIphoneSplash(root, on_finish=abrir_app)
+
+    root.mainloop()
