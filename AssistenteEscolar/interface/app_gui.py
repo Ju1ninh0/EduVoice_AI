@@ -1,3 +1,6 @@
+import sounddevice as sd
+import numpy as np
+import speech_recognition as sr
 import os, time, sqlite3, tempfile, threading, datetime
 import customtkinter as ctk
 from gtts import gTTS
@@ -49,22 +52,42 @@ class LeitorVoz(AssistenteBase):
         if self._mixer_init:
             pygame.mixer.music.stop()
 
-
 class OuvinteVoz(AssistenteBase):
-    def __init__(self, nome="Ouvinte"):
+    def __init__(self, nome="Ouvinte", samplerate=16000):
         super().__init__(nome)
         self.r = sr.Recognizer()
+        self.samplerate = samplerate
+        self.channels = 1
+        self.sample_width = 2 
 
-    def ouvir(self):
+    def ouvir(self, duration=8):
         try:
-            with sr.Microphone() as mic:
-                self.r.adjust_for_ambient_noise(mic, duration=0.5)
-                audio = self.r.listen(mic, timeout=5, phrase_time_limit=15)
-            return self.r.recognize_google(audio, language="pt-BR")
-        except Exception:
+            print(f"[OuvinteVoz] Gravando áudio por {duration}s...")
+            
+            grava = sd.rec(
+                int(duration * self.samplerate),
+                samplerate=self.samplerate,
+                channels=self.channels,
+                dtype="int16"
+            )
+            sd.wait()
+
+            if grava.ndim > 1:
+                grava = grava[:, 0]
+
+            raw_bytes = grava.tobytes()
+
+            audio_data = sr.AudioData(raw_bytes, self.samplerate, self.sample_width)
+
+            texto = self.r.recognize_google(audio_data, language="pt-BR")
+            print("[OuvinteVoz] Texto reconhecido:", texto)
+
+            return texto
+
+        except Exception as e:
+            print("ERRO OuvinteVoz (sounddevice):", e)
             return ""
-
-
+        
 class AnalisadorTexto(AssistenteBase):
     def __init__(self, nome="Analisador"):
         super().__init__(nome)
@@ -424,10 +447,10 @@ class AppGUI(ctk.CTk, AssistenteBase):
         )
         lbl.pack(pady=15)
 
-        self.txt_resumo_in = ctk.CTkTextbox(f, height=200)
+        self.txt_resumo_in = ctk.CTKTextbox(f, height=200)
         self.txt_resumo_in.pack(fill="both", expand=True, padx=20, pady=8)
 
-        self.txt_resumo_out = ctk.CTkTextbox(f, height=150)
+        self.txt_resumo_out = ctk.CTKTextbox(f, height=150)
         self.txt_resumo_out.pack(fill="both", expand=True, padx=20, pady=8)
 
         btns = ctk.CTkFrame(f)
@@ -758,12 +781,20 @@ class AppGUI(ctk.CTk, AssistenteBase):
         def run():
             txt = self.ouvinte.ouvir()
             if txt:
-                if hasattr(self, "txt_out_voz"):
-                    self.txt_out_voz.insert("end", txt + "\n")
-                self.db.salvar("Voz->Texto", "", txt)
-                self._set_status("Voz convertida com sucesso.")
+                try:
+                    self.db.salvar("Voz->Texto", "", txt)
+                except Exception as e:
+                    print("ERRO salvar DB:", e)
+                def gui_update():
+                    if hasattr(self, "txt_out_voz"):
+                        try:
+                            self.txt_out_voz.insert("end", txt + "\n")
+                        except Exception as e:
+                            print("ERRO inserindo no textbox:", e)
+                    self._set_status("Voz convertida com sucesso.")
+                self.after(0, gui_update)
             else:
-                self._set_status("Nada reconhecido.")
+                self.after(0, lambda: self._set_status("Nada reconhecido."))
         threading.Thread(target=run, daemon=True).start()
 
     def _salvar_voz_hist(self):
@@ -873,3 +904,6 @@ Antes de dormir — Revisar objetivo do dia: {objetivo}
 if __name__ == "__main__":
     app = AppGUI()
     app.mainloop()
+
+def _signature():
+    return
