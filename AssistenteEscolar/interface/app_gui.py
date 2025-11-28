@@ -5,7 +5,6 @@ import os, time, sqlite3, tempfile, threading, datetime
 import customtkinter as ctk
 from gtts import gTTS
 import pygame
-import speech_recognition as sr
 import nltk
 from nltk.tokenize import sent_tokenize
 nltk.download("punkt", quiet=True)
@@ -27,18 +26,31 @@ class LeitorVoz(AssistenteBase):
     def __init__(self, nome="Leitor"):
         super().__init__(nome)
         self._mixer_init = False
-        self._tmpdir = tempfile.gettempdir()
+        self._tmpdir = os.getcwd()
 
     def _ensure(self):
         if not self._mixer_init:
-            pygame.mixer.init()
+            pygame.mixer.init(frequency=44100, size=-16, channels=2, buffer=512)
             self._mixer_init = True
 
     def falar(self, texto):
         if not texto.strip():
             raise ValueError("Texto vazio")
-        mp3 = os.path.join(self._tmpdir, f"voz_{int(time.time())}.mp3")
+
+        mp3 = os.path.join(self._tmpdir, "voz_tmp.mp3")
+
+        if self._mixer_init:
+            pygame.mixer.music.stop()
+            pygame.mixer.music.unload()
+
+        if os.path.exists(mp3):
+            try:
+                os.remove(mp3)
+            except PermissionError:
+                pass
+
         gTTS(texto, lang="pt").save(mp3)
+
         self._ensure()
         pygame.mixer.music.load(mp3)
         pygame.mixer.music.play()
@@ -51,6 +63,7 @@ class LeitorVoz(AssistenteBase):
     def parar(self):
         if self._mixer_init:
             pygame.mixer.music.stop()
+            pygame.mixer.music.unload()
 
 class OuvinteVoz(AssistenteBase):
     def __init__(self, nome="Ouvinte", samplerate=16000):
@@ -58,12 +71,11 @@ class OuvinteVoz(AssistenteBase):
         self.r = sr.Recognizer()
         self.samplerate = samplerate
         self.channels = 1
-        self.sample_width = 2 
+        self.sample_width = 2
 
     def ouvir(self, duration=8):
         try:
             print(f"[OuvinteVoz] Gravando áudio por {duration}s...")
-            
             grava = sd.rec(
                 int(duration * self.samplerate),
                 samplerate=self.samplerate,
@@ -87,7 +99,8 @@ class OuvinteVoz(AssistenteBase):
         except Exception as e:
             print("ERRO OuvinteVoz (sounddevice):", e)
             return ""
-        
+
+
 class AnalisadorTexto(AssistenteBase):
     def __init__(self, nome="Analisador"):
         super().__init__(nome)
@@ -447,10 +460,10 @@ class AppGUI(ctk.CTk, AssistenteBase):
         )
         lbl.pack(pady=15)
 
-        self.txt_resumo_in = ctk.CTKTextbox(f, height=200)
+        self.txt_resumo_in = ctk.CTkTextbox(f, height=200)
         self.txt_resumo_in.pack(fill="both", expand=True, padx=20, pady=8)
 
-        self.txt_resumo_out = ctk.CTKTextbox(f, height=150)
+        self.txt_resumo_out = ctk.CTkTextbox(f, height=150)
         self.txt_resumo_out.pack(fill="both", expand=True, padx=20, pady=8)
 
         btns = ctk.CTkFrame(f)
